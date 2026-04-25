@@ -29,10 +29,10 @@ const AdminOrders = () => {
     return () => clearInterval(t);
   }, [refresh]);
 
-  const updateStatus = async (id: string, status: string) => {
-    const { error } = await supabase.from("orders").update({ status }).eq("id", id);
+  const updateStatus = async (id: string, status: typeof STAGES[number]) => {
+    const { error } = await supabase.from("orders").update({ status: status as any }).eq("id", id);
     if (error) toast.error(error.message);
-    else { toast.success(`Marked ${status.replaceAll("_", " ")}`); refresh(); }
+    else { toast.success(`Marked ${status.split("_").join(" ")}`); refresh(); }
   };
 
   return (
@@ -49,7 +49,7 @@ const AdminOrders = () => {
               filter === s ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary"
             )}
           >
-            {s.replaceAll("_", " ")}
+            {s.split("_").join(" ")}
           </button>
         ))}
       </div>
@@ -69,7 +69,7 @@ const AdminOrders = () => {
               </div>
               <div className="text-right">
                 <div className="text-primary font-bold text-lg">{formatKES(Number(o.total_amount))}</div>
-                <div className="text-xs uppercase tracking-widest font-display">{o.status.replaceAll("_", " ")}</div>
+                <div className="text-xs uppercase tracking-widest font-display">{o.status.split("_").join(" ")}</div>
               </div>
             </div>
 
