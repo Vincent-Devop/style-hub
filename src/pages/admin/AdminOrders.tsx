@@ -15,11 +15,26 @@ const AdminOrders = () => {
   const refresh = useCallback(async () => {
     let q = supabase
       .from("orders")
-      .select("*, order_items(*), profile:profiles!orders_user_id_fkey(display_name, phone)")
+      .select("*, order_items(*)")
       .order("created_at", { ascending: false });
     if (filter !== "ALL") q = q.eq("status", filter as any);
-    const { data } = await q;
-    setOrders(data || []);
+    const { data: ordersData, error } = await q;
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    const list = ordersData || [];
+    // Fetch profiles separately (no FK between orders.user_id and profiles)
+    const userIds = Array.from(new Set(list.map((o: any) => o.user_id).filter(Boolean)));
+    let profilesMap: Record<string, any> = {};
+    if (userIds.length) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, phone")
+        .in("user_id", userIds);
+      profilesMap = Object.fromEntries((profs || []).map((p: any) => [p.user_id, p]));
+    }
+    setOrders(list.map((o: any) => ({ ...o, profile: profilesMap[o.user_id] })));
   }, [filter]);
 
   useEffect(() => {
