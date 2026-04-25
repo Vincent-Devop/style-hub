@@ -69,7 +69,7 @@ const AdminOrders = () => {
               </div>
               <div className="text-right">
                 <div className="text-primary font-bold text-lg">{formatKES(Number(o.total_amount))}</div>
-                <div className="text-xs uppercase tracking-widest font-display">{o.status.replaceAll("_", " ")}</div>
+                <div className="text-xs uppercase tracking-widest font-display">{o.status.split("_").join(" ")}</div>
               </div>
             </div>
 
