@@ -22,16 +22,22 @@ const empty = {
   is_active: true,
 };
 
+interface VariantRow { id?: string; size: string; color: string; stock: string; }
+
 const AdminProducts = () => {
   const { user } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
   const [cats, setCats] = useState<any[]>([]);
   const [editing, setEditing] = useState<typeof empty | null>(null);
+  const [variants, setVariants] = useState<VariantRow[]>([]);
   const [uploading, setUploading] = useState(false);
 
   const refresh = useCallback(async () => {
     const [{ data: p }, { data: c }] = await Promise.all([
-      supabase.from("products").select("*, category:categories(name)").order("created_at", { ascending: false }),
+      supabase
+        .from("products")
+        .select("*, category:categories(name), variants:product_variants(id, size, color, stock)")
+        .order("created_at", { ascending: false }),
       supabase.from("categories").select("*").order("display_order"),
     ]);
     setProducts(p || []);
@@ -40,12 +46,27 @@ const AdminProducts = () => {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const openNew = () => setEditing({ ...empty, category_id: cats[0]?.id || "" });
-  const openEdit = (p: any) => setEditing({
-    id: p.id, name: p.name, description: p.description || "", category_id: p.category_id,
-    price: String(p.price), discount_price: p.discount_price ? String(p.discount_price) : "",
-    on_offer: p.on_offer, images: (p.images || []).join("\n"), is_active: p.is_active,
-  });
+  const openNew = () => {
+    setEditing({ ...empty, category_id: cats[0]?.id || "" });
+    setVariants([]);
+  };
+  const openEdit = (p: any) => {
+    setEditing({
+      id: p.id, name: p.name, description: p.description || "", category_id: p.category_id,
+      price: String(p.price), discount_price: p.discount_price ? String(p.discount_price) : "",
+      on_offer: p.on_offer, images: (p.images || []).join("\n"), is_active: p.is_active,
+    });
+    setVariants(
+      (p.variants || []).map((v: any) => ({
+        id: v.id, size: v.size || "", color: v.color || "", stock: String(v.stock ?? 0),
+      }))
+    );
+  };
+
+  const addVariant = () => setVariants([...variants, { size: "", color: "", stock: "0" }]);
+  const updateVariant = (i: number, patch: Partial<VariantRow>) =>
+    setVariants(variants.map((v, idx) => idx === i ? { ...v, ...patch } : v));
+  const removeVariant = (i: number) => setVariants(variants.filter((_, idx) => idx !== i));
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -76,11 +97,43 @@ const AdminProducts = () => {
       toast.error("Name, category and price are required");
       return;
     }
-    const { error } = editing.id
-      ? await supabase.from("products").update(payload).eq("id", editing.id)
-      : await supabase.from("products").insert(payload);
-    if (error) toast.error(error.message);
-    else { toast.success("Saved"); setEditing(null); refresh(); }
+
+    let productId = editing.id;
+    if (productId) {
+      const { error } = await supabase.from("products").update(payload).eq("id", productId);
+      if (error) { toast.error(error.message); return; }
+    } else {
+      const { data, error } = await supabase.from("products").insert(payload).select("id").single();
+      if (error || !data) { toast.error(error?.message || "Failed"); return; }
+      productId = data.id;
+    }
+
+    // Sync variants: delete removed, upsert current
+    const { data: existing } = await supabase
+      .from("product_variants").select("id").eq("product_id", productId);
+    const keepIds = new Set(variants.filter(v => v.id).map(v => v.id!));
+    const toDelete = (existing || []).filter(e => !keepIds.has(e.id)).map(e => e.id);
+    if (toDelete.length) {
+      await supabase.from("product_variants").delete().in("id", toDelete);
+    }
+    for (const v of variants) {
+      const row = {
+        product_id: productId,
+        size: v.size.trim() || null,
+        color: v.color.trim() || null,
+        stock: Math.max(0, Number(v.stock) || 0),
+      };
+      if (v.id) {
+        await supabase.from("product_variants").update(row).eq("id", v.id);
+      } else if (row.size || row.color) {
+        await supabase.from("product_variants").insert(row);
+      }
+    }
+
+    toast.success("Saved");
+    setEditing(null);
+    setVariants([]);
+    refresh();
   };
 
   const remove = async (id: string) => {
