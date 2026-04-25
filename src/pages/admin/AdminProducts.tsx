@@ -232,15 +232,27 @@ const AdminProducts = () => {
                   <Input type="number" value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value })} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 items-end">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Discount price (KES)</Label>
-                  <Input type="number" value={editing.discount_price} onChange={(e) => setEditing({ ...editing, discount_price: e.target.value })} />
+                  <Label>Current price (KES)</Label>
+                  <Input type="number" value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value })} />
                 </div>
-                <div className="flex items-center gap-3 h-10">
-                  <Switch checked={editing.on_offer} onCheckedChange={(v) => setEditing({ ...editing, on_offer: v })} />
-                  <span>On offer</span>
+                <div>
+                  <Label>Former price (KES, optional)</Label>
+                  <Input
+                    type="number"
+                    placeholder="e.g. original price before discount"
+                    value={editing.discount_price}
+                    onChange={(e) => setEditing({ ...editing, discount_price: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    If "On offer" is on, this is shown as the strike-through original price.
+                  </p>
                 </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch checked={editing.on_offer} onCheckedChange={(v) => setEditing({ ...editing, on_offer: v })} />
+                <span>On offer (show former price as discount)</span>
               </div>
               <div>
                 <Label>Description</Label>
