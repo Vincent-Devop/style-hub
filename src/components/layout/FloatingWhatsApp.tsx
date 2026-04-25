@@ -71,16 +71,24 @@ export const FloatingWhatsApp = () => {
           </div>
 
           {QUICK.map((q) => (
-            <a
+            <button
               key={q.label}
-              href={buildWaLink(PRIMARY_WHATSAPP, q.msg)}
-              target="_blank"
-              rel="noreferrer"
-              className={`flex items-center gap-3 w-full p-3 mb-2 rounded-sm font-display tracking-wider text-sm uppercase transition-transform hover:-translate-y-0.5 ${q.color}`}
+              type="button"
+              onClick={() => {
+                const url = buildWaLink(PRIMARY_WHATSAPP, q.msg);
+                // Open in the top window — avoids "API blocked" inside preview iframes
+                try {
+                  (window.top || window).open(url, "_blank", "noopener,noreferrer");
+                } catch {
+                  window.open(url, "_blank", "noopener,noreferrer");
+                }
+                setOpen(false);
+              }}
+              className={`flex items-center gap-3 w-full p-3 mb-2 rounded-sm font-display tracking-wider text-sm uppercase transition-transform hover:-translate-y-0.5 text-left ${q.color}`}
             >
               <q.icon className="size-4" />
               {q.label}
-            </a>
+            </button>
           ))}
         </div>
       )}
