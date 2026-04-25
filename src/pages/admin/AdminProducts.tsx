@@ -264,6 +264,42 @@ const AdminProducts = () => {
                 <input type="file" accept="image/*" onChange={handleUpload} className="mt-2 text-sm" disabled={uploading} />
                 {uploading && <p className="text-xs text-muted-foreground mt-1">Uploading…</p>}
               </div>
+              <div className="border border-border rounded-sm p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base">Variants (size / color / stock)</Label>
+                  <Button type="button" size="sm" variant="ghost" onClick={addVariant}>
+                    <Plus className="size-3" /> Add variant
+                  </Button>
+                </div>
+                {variants.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No variants. Add sizes &amp; colors so customers can pick.</p>
+                )}
+                {variants.map((v, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_1fr_90px_auto] gap-2 items-end">
+                    <div>
+                      {i === 0 && <Label className="text-xs">Size</Label>}
+                      <Input placeholder="e.g. 42" value={v.size} onChange={(e) => updateVariant(i, { size: e.target.value })} />
+                    </div>
+                    <div>
+                      {i === 0 && <Label className="text-xs">Color</Label>}
+                      <Input placeholder="e.g. Black" value={v.color} onChange={(e) => updateVariant(i, { color: e.target.value })} />
+                    </div>
+                    <div>
+                      {i === 0 && <Label className="text-xs">Stock</Label>}
+                      <Input type="number" min={0} value={v.stock} onChange={(e) => updateVariant(i, { stock: e.target.value })} />
+                    </div>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => removeVariant(i)}>
+                      <Trash2 className="size-3 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+                <p className="text-xs text-muted-foreground">
+                  Total stock: <span className="text-foreground font-bold">
+                    {variants.reduce((s, v) => s + (Number(v.stock) || 0), 0)}
+                  </span>
+                </p>
+              </div>
+
               <div className="flex items-center gap-3">
                 <Switch checked={editing.is_active} onCheckedChange={(v) => setEditing({ ...editing, is_active: v })} />
                 <span>Active (visible to customers)</span>
