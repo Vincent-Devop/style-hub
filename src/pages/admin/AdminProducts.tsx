@@ -156,28 +156,49 @@ const AdminProducts = () => {
             <tr className="text-left">
               <th className="p-3">Name</th>
               <th className="p-3">Category</th>
-              <th className="p-3">Price</th>
-              <th className="p-3">Offer</th>
+              <th className="p-3">Pricing</th>
+              <th className="p-3">Stock</th>
+              <th className="p-3">Variants</th>
               <th className="p-3">Active</th>
               <th className="p-3"></th>
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => (
-              <tr key={p.id} className="border-t border-border">
-                <td className="p-3 font-display tracking-wide">{p.name}</td>
-                <td className="p-3 text-muted-foreground">{p.category?.name}</td>
-                <td className="p-3">{formatKES(Number(p.price))}</td>
-                <td className="p-3">{p.on_offer ? <span className="text-primary">Yes</span> : "—"}</td>
-                <td className="p-3">{p.is_active ? "✓" : "✗"}</td>
-                <td className="p-3 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Edit className="size-3" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => remove(p.id)}><Trash2 className="size-3 text-destructive" /></Button>
-                </td>
-              </tr>
-            ))}
+            {products.map((p) => {
+              const totalStock = (p.variants || []).reduce((s: number, v: any) => s + (v.stock || 0), 0);
+              const variantSummary = (p.variants || [])
+                .map((v: any) => [v.size, v.color].filter(Boolean).join("/"))
+                .filter(Boolean).join(", ") || "—";
+              return (
+                <tr key={p.id} className="border-t border-border align-top">
+                  <td className="p-3 font-display tracking-wide">{p.name}</td>
+                  <td className="p-3 text-muted-foreground">{p.category?.name}</td>
+                  <td className="p-3">
+                    {p.on_offer && p.discount_price ? (
+                      <div>
+                        <div className="text-primary font-bold">{formatKES(Number(p.discount_price))}</div>
+                        <div className="text-xs text-muted-foreground line-through">{formatKES(Number(p.price))}</div>
+                      </div>
+                    ) : (
+                      <div>{formatKES(Number(p.price))}</div>
+                    )}
+                  </td>
+                  <td className="p-3">
+                    <span className={totalStock === 0 ? "text-destructive" : "text-foreground"}>{totalStock}</span>
+                  </td>
+                  <td className="p-3 text-xs text-muted-foreground max-w-[200px] truncate" title={variantSummary}>
+                    {variantSummary}
+                  </td>
+                  <td className="p-3">{p.is_active ? "✓" : "✗"}</td>
+                  <td className="p-3 text-right whitespace-nowrap">
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Edit className="size-3" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => remove(p.id)}><Trash2 className="size-3 text-destructive" /></Button>
+                  </td>
+                </tr>
+              );
+            })}
             {products.length === 0 && (
-              <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No products yet.</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No products yet.</td></tr>
             )}
           </tbody>
         </table>
