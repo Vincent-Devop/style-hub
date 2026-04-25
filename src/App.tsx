@@ -6,8 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { RequireAuth, RequireAdmin } from "@/components/auth/RouteGuards";
-import PublicLayout from "@/components/layout/PublicLayout";
-import AdminLayout from "@/components/admin/AdminLayout";
+import { PublicLayout } from "@/components/layout/PublicLayout";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 
 import Home from "./pages/Home";
 import Shop from "./pages/Shop";
