@@ -29,10 +29,10 @@ const AdminOrders = () => {
     return () => clearInterval(t);
   }, [refresh]);
 
-  const updateStatus = async (id: string, status: string) => {
-    const { error } = await supabase.from("orders").update({ status }).eq("id", id);
+  const updateStatus = async (id: string, status: typeof STAGES[number]) => {
+    const { error } = await supabase.from("orders").update({ status: status as any }).eq("id", id);
     if (error) toast.error(error.message);
-    else { toast.success(`Marked ${status.replaceAll("_", " ")}`); refresh(); }
+    else { toast.success(`Marked ${status.split("_").join(" ")}`); refresh(); }
   };
 
   return (
