@@ -22,16 +22,22 @@ const empty = {
   is_active: true,
 };
 
+interface VariantRow { id?: string; size: string; color: string; stock: string; }
+
 const AdminProducts = () => {
   const { user } = useAuth();
   const [products, setProducts] = useState<any[]>([]);
   const [cats, setCats] = useState<any[]>([]);
   const [editing, setEditing] = useState<typeof empty | null>(null);
+  const [variants, setVariants] = useState<VariantRow[]>([]);
   const [uploading, setUploading] = useState(false);
 
   const refresh = useCallback(async () => {
     const [{ data: p }, { data: c }] = await Promise.all([
-      supabase.from("products").select("*, category:categories(name)").order("created_at", { ascending: false }),
+      supabase
+        .from("products")
+        .select("*, category:categories(name), variants:product_variants(id, size, color, stock)")
+        .order("created_at", { ascending: false }),
       supabase.from("categories").select("*").order("display_order"),
     ]);
     setProducts(p || []);
@@ -40,12 +46,27 @@ const AdminProducts = () => {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const openNew = () => setEditing({ ...empty, category_id: cats[0]?.id || "" });
-  const openEdit = (p: any) => setEditing({
-    id: p.id, name: p.name, description: p.description || "", category_id: p.category_id,
-    price: String(p.price), discount_price: p.discount_price ? String(p.discount_price) : "",
-    on_offer: p.on_offer, images: (p.images || []).join("\n"), is_active: p.is_active,
-  });
+  const openNew = () => {
+    setEditing({ ...empty, category_id: cats[0]?.id || "" });
+    setVariants([]);
+  };
+  const openEdit = (p: any) => {
+    setEditing({
+      id: p.id, name: p.name, description: p.description || "", category_id: p.category_id,
+      price: String(p.price), discount_price: p.discount_price ? String(p.discount_price) : "",
+      on_offer: p.on_offer, images: (p.images || []).join("\n"), is_active: p.is_active,
+    });
+    setVariants(
+      (p.variants || []).map((v: any) => ({
+        id: v.id, size: v.size || "", color: v.color || "", stock: String(v.stock ?? 0),
+      }))
+    );
+  };
+
+  const addVariant = () => setVariants([...variants, { size: "", color: "", stock: "0" }]);
+  const updateVariant = (i: number, patch: Partial<VariantRow>) =>
+    setVariants(variants.map((v, idx) => idx === i ? { ...v, ...patch } : v));
+  const removeVariant = (i: number) => setVariants(variants.filter((_, idx) => idx !== i));
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -76,11 +97,43 @@ const AdminProducts = () => {
       toast.error("Name, category and price are required");
       return;
     }
-    const { error } = editing.id
-      ? await supabase.from("products").update(payload).eq("id", editing.id)
-      : await supabase.from("products").insert(payload);
-    if (error) toast.error(error.message);
-    else { toast.success("Saved"); setEditing(null); refresh(); }
+
+    let productId = editing.id;
+    if (productId) {
+      const { error } = await supabase.from("products").update(payload).eq("id", productId);
+      if (error) { toast.error(error.message); return; }
+    } else {
+      const { data, error } = await supabase.from("products").insert(payload).select("id").single();
+      if (error || !data) { toast.error(error?.message || "Failed"); return; }
+      productId = data.id;
+    }
+
+    // Sync variants: delete removed, upsert current
+    const { data: existing } = await supabase
+      .from("product_variants").select("id").eq("product_id", productId);
+    const keepIds = new Set(variants.filter(v => v.id).map(v => v.id!));
+    const toDelete = (existing || []).filter(e => !keepIds.has(e.id)).map(e => e.id);
+    if (toDelete.length) {
+      await supabase.from("product_variants").delete().in("id", toDelete);
+    }
+    for (const v of variants) {
+      const row = {
+        product_id: productId,
+        size: v.size.trim() || null,
+        color: v.color.trim() || null,
+        stock: Math.max(0, Number(v.stock) || 0),
+      };
+      if (v.id) {
+        await supabase.from("product_variants").update(row).eq("id", v.id);
+      } else if (row.size || row.color) {
+        await supabase.from("product_variants").insert(row);
+      }
+    }
+
+    toast.success("Saved");
+    setEditing(null);
+    setVariants([]);
+    refresh();
   };
 
   const remove = async (id: string) => {
@@ -103,28 +156,49 @@ const AdminProducts = () => {
             <tr className="text-left">
               <th className="p-3">Name</th>
               <th className="p-3">Category</th>
-              <th className="p-3">Price</th>
-              <th className="p-3">Offer</th>
+              <th className="p-3">Pricing</th>
+              <th className="p-3">Stock</th>
+              <th className="p-3">Variants</th>
               <th className="p-3">Active</th>
               <th className="p-3"></th>
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => (
-              <tr key={p.id} className="border-t border-border">
-                <td className="p-3 font-display tracking-wide">{p.name}</td>
-                <td className="p-3 text-muted-foreground">{p.category?.name}</td>
-                <td className="p-3">{formatKES(Number(p.price))}</td>
-                <td className="p-3">{p.on_offer ? <span className="text-primary">Yes</span> : "—"}</td>
-                <td className="p-3">{p.is_active ? "✓" : "✗"}</td>
-                <td className="p-3 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Edit className="size-3" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => remove(p.id)}><Trash2 className="size-3 text-destructive" /></Button>
-                </td>
-              </tr>
-            ))}
+            {products.map((p) => {
+              const totalStock = (p.variants || []).reduce((s: number, v: any) => s + (v.stock || 0), 0);
+              const variantSummary = (p.variants || [])
+                .map((v: any) => [v.size, v.color].filter(Boolean).join("/"))
+                .filter(Boolean).join(", ") || "—";
+              return (
+                <tr key={p.id} className="border-t border-border align-top">
+                  <td className="p-3 font-display tracking-wide">{p.name}</td>
+                  <td className="p-3 text-muted-foreground">{p.category?.name}</td>
+                  <td className="p-3">
+                    {p.on_offer && p.discount_price ? (
+                      <div>
+                        <div className="text-primary font-bold">{formatKES(Number(p.discount_price))}</div>
+                        <div className="text-xs text-muted-foreground line-through">{formatKES(Number(p.price))}</div>
+                      </div>
+                    ) : (
+                      <div>{formatKES(Number(p.price))}</div>
+                    )}
+                  </td>
+                  <td className="p-3">
+                    <span className={totalStock === 0 ? "text-destructive" : "text-foreground"}>{totalStock}</span>
+                  </td>
+                  <td className="p-3 text-xs text-muted-foreground max-w-[200px] truncate" title={variantSummary}>
+                    {variantSummary}
+                  </td>
+                  <td className="p-3">{p.is_active ? "✓" : "✗"}</td>
+                  <td className="p-3 text-right whitespace-nowrap">
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Edit className="size-3" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => remove(p.id)}><Trash2 className="size-3 text-destructive" /></Button>
+                  </td>
+                </tr>
+              );
+            })}
             {products.length === 0 && (
-              <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No products yet.</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No products yet.</td></tr>
             )}
           </tbody>
         </table>
@@ -158,15 +232,27 @@ const AdminProducts = () => {
                   <Input type="number" value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value })} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 items-end">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Discount price (KES)</Label>
-                  <Input type="number" value={editing.discount_price} onChange={(e) => setEditing({ ...editing, discount_price: e.target.value })} />
+                  <Label>Current price (KES)</Label>
+                  <Input type="number" value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value })} />
                 </div>
-                <div className="flex items-center gap-3 h-10">
-                  <Switch checked={editing.on_offer} onCheckedChange={(v) => setEditing({ ...editing, on_offer: v })} />
-                  <span>On offer</span>
+                <div>
+                  <Label>Former price (KES, optional)</Label>
+                  <Input
+                    type="number"
+                    placeholder="e.g. original price before discount"
+                    value={editing.discount_price}
+                    onChange={(e) => setEditing({ ...editing, discount_price: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    If "On offer" is on, this is shown as the strike-through original price.
+                  </p>
                 </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch checked={editing.on_offer} onCheckedChange={(v) => setEditing({ ...editing, on_offer: v })} />
+                <span>On offer (show former price as discount)</span>
               </div>
               <div>
                 <Label>Description</Label>
@@ -178,6 +264,42 @@ const AdminProducts = () => {
                 <input type="file" accept="image/*" onChange={handleUpload} className="mt-2 text-sm" disabled={uploading} />
                 {uploading && <p className="text-xs text-muted-foreground mt-1">Uploading…</p>}
               </div>
+              <div className="border border-border rounded-sm p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base">Variants (size / color / stock)</Label>
+                  <Button type="button" size="sm" variant="ghost" onClick={addVariant}>
+                    <Plus className="size-3" /> Add variant
+                  </Button>
+                </div>
+                {variants.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No variants. Add sizes &amp; colors so customers can pick.</p>
+                )}
+                {variants.map((v, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_1fr_90px_auto] gap-2 items-end">
+                    <div>
+                      {i === 0 && <Label className="text-xs">Size</Label>}
+                      <Input placeholder="e.g. 42" value={v.size} onChange={(e) => updateVariant(i, { size: e.target.value })} />
+                    </div>
+                    <div>
+                      {i === 0 && <Label className="text-xs">Color</Label>}
+                      <Input placeholder="e.g. Black" value={v.color} onChange={(e) => updateVariant(i, { color: e.target.value })} />
+                    </div>
+                    <div>
+                      {i === 0 && <Label className="text-xs">Stock</Label>}
+                      <Input type="number" min={0} value={v.stock} onChange={(e) => updateVariant(i, { stock: e.target.value })} />
+                    </div>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => removeVariant(i)}>
+                      <Trash2 className="size-3 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+                <p className="text-xs text-muted-foreground">
+                  Total stock: <span className="text-foreground font-bold">
+                    {variants.reduce((s, v) => s + (Number(v.stock) || 0), 0)}
+                  </span>
+                </p>
+              </div>
+
               <div className="flex items-center gap-3">
                 <Switch checked={editing.is_active} onCheckedChange={(v) => setEditing({ ...editing, is_active: v })} />
                 <span>Active (visible to customers)</span>
