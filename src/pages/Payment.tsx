@@ -88,7 +88,7 @@ const Payment = () => {
     return (
       <div className="container-x mx-auto py-20 text-center">
         <h1 className="font-display text-4xl mb-2">Payment already submitted</h1>
-        <p className="text-muted-foreground mb-6">Status: {order.status.replaceAll("_", " ")}</p>
+        <p className="text-muted-foreground mb-6">Status: {order.status.split("_").join(" ")}</p>
         <Button asChild variant="hero"><Link to="/orders">View my orders</Link></Button>
       </div>
     );
