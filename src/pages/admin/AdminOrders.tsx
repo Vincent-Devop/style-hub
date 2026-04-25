@@ -49,7 +49,7 @@ const AdminOrders = () => {
               filter === s ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary"
             )}
           >
-            {s.replaceAll("_", " ")}
+            {s.split("_").join(" ")}
           </button>
         ))}
       </div>
